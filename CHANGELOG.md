@@ -1,6 +1,6 @@
 # @stackra/ts-container
 
-## 2.0.5 — 2026-04-18
+## 2.0.6 — 2026-04-18
 
 ### Improvements
 
