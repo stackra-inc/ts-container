@@ -1,5 +1,15 @@
 # @stakra/ts-container
 
+## 2.0.2 — 2026-04-18
+
+### Fixes
+
+- 📝 **README** — full documentation rewrite with badges, all API references,
+  React integration guide, lifecycle hooks, advanced features, and tsconfig
+  requirements
+
+---
+
 ## 2.0.1 — 2026-04-18
 
 ### Fixes & Improvements
