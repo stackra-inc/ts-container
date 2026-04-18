@@ -18,6 +18,7 @@
     "application",
     "bootstrap"
   ],
+  "packageManager": "pnpm@10.33.0",
   "license": "MIT",
   "author": {
     "name": "Stakra",
@@ -69,7 +70,7 @@
     "release": "pnpm publish --access public --no-git-checks"
   },
   "dependencies": {
-    "@vivtel/metadata": "file:metadata",
+    "@vivtel/metadata": "^1.0.5",
     "reflect-metadata": "^0.2.2"
   },
   "peerDependencies": {
@@ -88,7 +89,7 @@
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@vitest/ui": "^4.1.4",
-    "eslint": "10.2.0",
+    "eslint": "10.2.1",
     "jsdom": "^29.0.2",
     "prettier": "^3.8.3",
     "react": "^19.2.5",

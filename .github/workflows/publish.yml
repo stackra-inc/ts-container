@@ -1,62 +1,97 @@
 # =============================================================================
-# Publish to npm — @stakra/ts-container
-# =============================================================================
+# Publish — @stakra/ts-container
 #
 # Triggered by:
-#   - Pushing a tag matching v* (e.g. v2.0.0)
-#   - Manual workflow_dispatch
+#   - Pushing a semver tag  (v1.2.3 / v1.2.3-beta.0)
+#   - Manual workflow_dispatch with optional dry-run
 #
 # Required secrets:
-#   - NPM_TOKEN — npm automation token with publish access
+#   NPM_TOKEN          — npm automation token (Granular: read+write packages)
+#
+# Optional secrets (Slack notification):
+#   SLACK_WEBHOOK_URL  — Incoming Webhook URL for release announcements
 #
 # Flow:
-#   1. Typecheck
-#   2. Build
-#   3. Test
-#   4. Publish to npm
-#   5. Create GitHub Release with changelog notes
+#   validate ──► quality ──► publish ──► release ──► notify (optional)
+#
+# Notes:
+#   - npm provenance is enabled (--provenance) for supply-chain transparency
+#   - GitHub Release is created automatically from CHANGELOG.md
+#   - Slack message is skipped if SLACK_WEBHOOK_URL secret is not set
 # =============================================================================
 
-name: Publish to npm
+name: Publish
 
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Dry run (skip actual publish)"
+        description: "Dry run — skip npm publish and GitHub Release"
         required: false
-        default: false
-        type: boolean
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
-    name: 🚀 Publish
+  # ---------------------------------------------------------------------------
+  # Validate — confirm tag matches package.json version
+  # ---------------------------------------------------------------------------
+  validate:
+    name: ✅ Validate
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-
+    outputs:
+      version: ${{ steps.pkg.outputs.version }}
+      tag: ${{ steps.tag.outputs.tag }}
+      is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: 📦 Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: 📋 Read package version
+        id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          registry-url: "https://registry.npmjs.org"
-          cache: "pnpm"
+      - name: 🏷️ Parse tag
+        id: tag
+        run: |
+          TAG="${GITHUB_REF_NAME:-v${{ steps.pkg.outputs.version }}}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          # Pre-release if tag contains a hyphen after the version numbers
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-.+ ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: 📥 Install dependencies
-        run: pnpm install --no-frozen-lockfile
+      - name: � Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          PKG_VERSION="${{ steps.pkg.outputs.version }}"
+          TAG_VERSION="${{ steps.tag.outputs.tag }}"
+          EXPECTED="v${PKG_VERSION}"
+          if [ "$TAG_VERSION" != "$EXPECTED" ]; then
+            echo "❌ Tag '$TAG_VERSION' does not match package.json version '$EXPECTED'"
+            exit 1
+          fi
+          echo "✅ Tag matches package version: $TAG_VERSION"
+
+  # ---------------------------------------------------------------------------
+  # Quality gate — typecheck + build + test must all pass before publish
+  # ---------------------------------------------------------------------------
+  quality:
+    name: 🔬 Quality Gate
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
       - name: 🔷 Type check
         run: pnpm typecheck
@@ -64,33 +99,193 @@ jobs:
       - name: 🔨 Build
         run: pnpm build
 
-      - name: 🧪 Run tests
+      - name: 🧪 Test
         run: pnpm test
 
-      - name: 🚀 Publish to npm
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: pnpm publish --access public --no-git-checks
+      - name: 📤 Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-publish-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Publish to npm
+  # ---------------------------------------------------------------------------
+  publish:
+    name: 🚀 Publish to npm
+    runs-on: ubuntu-latest
+    needs: [validate, quality]
+    if: ${{ github.event.inputs.dry_run != 'true' }}
+    permissions:
+      contents: read
+      id-token: write # required for npm provenance
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@stakra/ts-container
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          node-version: "22"
+
+      - name: 📥 Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-publish-${{ github.sha }}
+          path: dist/
+
+      - name: 🔧 Configure npm registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: 🚀 Publish
+        run: pnpm publish --access public --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: 🏷️ Extract version
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+  # ---------------------------------------------------------------------------
+  # Create GitHub Release
+  # ---------------------------------------------------------------------------
+  release:
+    name: � GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish]
+    if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/') }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: 📝 Extract changelog notes
+      - name: 📝 Extract changelog for this version
         id: changelog
         run: |
-          # Extract the top-most version block from CHANGELOG.md
-          awk '/^## [0-9]/{if(found) exit; found=1; next} found{print}' CHANGELOG.md > release_notes.txt
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          cat release_notes.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          VERSION="${{ needs.validate.outputs.version }}"
+          # Extract the block between the first ## heading and the next one
+          awk "/^## ${VERSION}|^## \[${VERSION}\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md \
+            | sed '/^[[:space:]]*$/d' > release_body.md
+          # Fallback if nothing extracted
+          if [ ! -s release_body.md ]; then
+            echo "Release v${VERSION}" > release_body.md
+          fi
+          echo "See [CHANGELOG](https://github.com/stakraco/ts-container/blob/main/CHANGELOG.md) for full details." >> release_body.md
 
-      - name: 🎉 Create GitHub Release
-        if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/') }}
+      - name: 🎉 Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "v${{ steps.version.outputs.version }}"
-          body: ${{ steps.changelog.outputs.notes }}
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: "${{ needs.validate.outputs.tag }}"
+          body_path: release_body.md
           draft: false
-          prerelease: false
+          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
+          generate_release_notes: false
+          make_latest: ${{ needs.validate.outputs.is_prerelease == 'false' }}
+
+  # ---------------------------------------------------------------------------
+  # Slack notification (optional — skipped if SLACK_WEBHOOK_URL not set)
+  # ---------------------------------------------------------------------------
+  notify:
+    name: 💬 Slack Notification
+    runs-on: ubuntu-latest
+    needs: [validate, publish, release]
+    if: |
+      always() &&
+      github.event.inputs.dry_run != 'true' &&
+      startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: 🔍 Check if Slack webhook is configured
+        id: check
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ SLACK_WEBHOOK_URL not set — skipping Slack notification"
+          fi
+
+      - name: 💬 Notify Slack — success
+        if: |
+          steps.check.outputs.configured == 'true' &&
+          needs.publish.result == 'success' &&
+          needs.release.result == 'success'
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "✅ *@stakra/ts-container ${{ needs.validate.outputs.tag }}* published to npm",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🚀 New Release: @stakra/ts-container ${{ needs.validate.outputs.tag }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Status:*\n✅ Published"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n`${{ needs.validate.outputs.version }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*npm:*\n<https://www.npmjs.com/package/@stakra/ts-container/v/${{ needs.validate.outputs.version }}|View on npm>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Release:*\n<https://github.com/stakraco/ts-container/releases/tag/${{ needs.validate.outputs.tag }}|View on GitHub>"
+                    }
+                  ]
+                }
+              ]
+            }
+
+      - name: 💬 Notify Slack — failure
+        if: |
+          steps.check.outputs.configured == 'true' &&
+          (needs.publish.result == 'failure' || needs.release.result == 'failure')
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "❌ *@stakra/ts-container ${{ needs.validate.outputs.tag }}* publish FAILED",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ Publish Failed: @stakra/ts-container ${{ needs.validate.outputs.tag }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*npm publish:*\n${{ needs.publish.result == 'failure' && '❌ Failed' || '✅ OK' }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*GitHub Release:*\n${{ needs.release.result == 'failure' && '❌ Failed' || '✅ OK' }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Run:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>"
+                    }
+                  ]
+                }
+              ]
+            }
