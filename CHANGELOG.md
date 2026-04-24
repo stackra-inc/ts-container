@@ -1,5 +1,15 @@
 # @stackra/ts-container
 
+## 2.0.9 — 2026-04-24
+
+### Fixed
+
+- 📝 **tsup.config.ts comment fix** — corrected build output filenames in JSDoc
+  (`index.mjs` → `index.js` for ESM, `index.js` → `index.cjs` for CJS) to match
+  actual tsup output when `"type": "module"` is set
+
+---
+
 ## 2.0.8 — 2026-04-20
 
 ### Changed
