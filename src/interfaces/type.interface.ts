@@ -33,5 +33,5 @@
  * ```
  */
 export interface Type<T = any> extends NewableFunction {
-  new (...args: unknown[]): T;
+  new (...args: any[]): T;
 }

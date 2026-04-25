@@ -1,5 +1,18 @@
 # @stackra/ts-container
 
+## 2.0.10 — 2026-04-25
+
+### Fixed
+
+- 🔧 **`Type<T>` interface fix** — changed constructor signature from
+  `new (...args: unknown[]): T` to `new (...args: any[]): T` to match NestJS's
+  `Type<T>` definition. The `unknown[]` constraint was too strict for a DI
+  container — TypeScript's contravariant parameter checking prevented classes
+  with typed constructor params (e.g., `constructor(config: RealtimeConfig)`)
+  from satisfying `Type<T>`, breaking class providers and module exports
+
+---
+
 ## 2.0.9 — 2026-04-24
 
 ### Fixed
