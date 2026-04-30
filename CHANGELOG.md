@@ -1,5 +1,14 @@
 # @stackra/ts-container
 
+## 2.0.14 — 2026-04-30
+
+### Fixed
+
+- 🐛 **tsconfig types** — added `"node"` to the `types` array alongside
+  `@stackra/ts-support/@types`. The child tsconfig's `types` field was
+  overriding the base preset's `"types": ["node"]`, causing `process` to
+  be undefined in CI.
+
 ## 2.0.13 — 2026-04-30
 
 ### Added
