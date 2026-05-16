@@ -50,8 +50,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@stackra/contracts": "workspace:*",
-    "@stackra/ts-support": "workspace:*",
+    "@stackra/contracts": "*",
+    "@stackra/ts-support": "*",
     "@vivtel/metadata": "^1.0.5",
     "reflect-metadata": "*"
   },
@@ -64,7 +64,7 @@
     }
   },
   "devDependencies": {
-    "@stackra/testing": "workspace:*",
+    "@stackra/testing": "*",
     "@stackra/typescript-config": "*",
     "@types/react": "*",
     "jiti": "*",
