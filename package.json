@@ -1,0 +1,73 @@
+{
+  "name": "@stackra/ts-container",
+  "version": "2.0.15",
+  "description": "NestJS-style dependency injection for React — decorators, modules, lifecycle hooks, lazy loading, React bindings",
+  "license": "MIT",
+  "author": {
+    "name": "Stackra L.L.C",
+    "email": "dev@stackra.com",
+    "url": "https://stackra.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stackra-inc/ts-container.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stackra-inc/ts-container/issues"
+  },
+  "homepage": "https://github.com/stackra-inc/ts-container#readme",
+  "keywords": [
+    "stackra",
+    "typescript",
+    "dependency-injection",
+    "di",
+    "container",
+    "decorators",
+    "react",
+    "modules"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "check-types": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules/.cache",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@stackra/contracts": "workspace:*",
+    "@stackra/ts-support": "workspace:*",
+    "@vivtel/metadata": "^1.0.5",
+    "reflect-metadata": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@stackra/testing": "workspace:*",
+    "@stackra/typescript-config": "catalog:",
+    "@types/react": "catalog:",
+    "jiti": "catalog:",
+    "react": "catalog:"
+  }
+}
