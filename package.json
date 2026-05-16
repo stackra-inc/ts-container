@@ -53,10 +53,10 @@
     "@stackra/contracts": "workspace:*",
     "@stackra/ts-support": "workspace:*",
     "@vivtel/metadata": "^1.0.5",
-    "reflect-metadata": "catalog:"
+    "reflect-metadata": "*"
   },
   "peerDependencies": {
-    "react": "catalog:"
+    "react": "*"
   },
   "peerDependenciesMeta": {
     "react": {
@@ -65,9 +65,9 @@
   },
   "devDependencies": {
     "@stackra/testing": "workspace:*",
-    "@stackra/typescript-config": "catalog:",
-    "@types/react": "catalog:",
-    "jiti": "catalog:",
-    "react": "catalog:"
+    "@stackra/typescript-config": "*",
+    "@types/react": "*",
+    "jiti": "*",
+    "react": "*"
   }
 }
